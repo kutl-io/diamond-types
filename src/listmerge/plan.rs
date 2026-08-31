@@ -585,17 +585,38 @@ impl ConflictSubgraph<M1EntryState> {
             let e = &self.entries[current_idx];
             if e.state.next < c.len() {
                 // Look for a child we can visit.
-                for i in e.state.next..c.len() {
+                let mut i = e.state.next;
+                while i < c.len() {
                     let next_idx = c[i];
                     let e2 = &self.entries[next_idx];
-                    debug_assert_eq!(e2.state.visited, false);
+
+                    // A merge child appears in the child list of each of its
+                    // parents, but only the parent we descend from consumes
+                    // its slot. If the child was since visited by descending
+                    // from a different parent (or via the deferred b_children
+                    // path), this parent still lists it here. Retire the slot
+                    // (visited never reverts) so rescans of this node don't
+                    // re-walk it and the node isn't re-pushed onto the stack
+                    // on its account. The visited flag guarantees each node
+                    // is still processed exactly once.
+                    if e2.state.visited {
+                        let e = &mut self.entries[current_idx];
+                        c.swap(e.state.next, i);
+                        e.state.next += 1;
+                        i += 1;
+                        continue;
+                    }
 
                     // This is a merge, but we haven't covered all the merge's parents.
-                    if e2.state.parents_satisfied != e2.parents.len() { continue; }
+                    if e2.state.parents_satisfied != e2.parents.len() {
+                        i += 1;
+                        continue;
+                    }
 
                     if a_spans_remaining > 0 && e2.flag == DiffFlag::OnlyB {
                         // We'll come back to this node later. More A stuff first!
                         b_children.push(next_idx);
+                        i += 1;
                         continue;
                     }
 
@@ -812,6 +833,29 @@ mod test {
     use crate::causalgraph::graph::tools::DiffFlag;
     use crate::{DTRange, Frontier};
     use crate::dtrange::RangeHelpers;
+
+    /// Regression: the m1 plan walker asserted that a scanned child is
+    /// unvisited, but a merge child sits in the child list of each of its
+    /// parents and only the parent it is descended from consumes its slot -
+    /// so a parent re-scanned off the stack can legitimately encounter a
+    /// visited child. Found by an external randomized simulation; the
+    /// fixture is a real 334-byte oplog. The merge result must also equal a
+    /// fresh tip checkout.
+    #[test]
+    fn walk_tolerates_visited_merge_children() {
+        use crate::list::ListOpLog;
+        let bytes = include_bytes!("../../test_data/plan_visited_regression.dt");
+        let oplog = ListOpLog::load_from(bytes).unwrap();
+        let lv = oplog.cg.agent_assignment
+            .try_remote_to_local_version(
+                crate::causalgraph::agent_assignment::remote_ids::RemoteVersion("peer-0", 53),
+            )
+            .unwrap();
+        let mut branch = crate::list::ListBranch::new_at_local_version(&oplog, &[lv]);
+        branch.merge(&oplog, oplog.cg.version.as_ref()); // panicked here
+        assert_eq!(branch.content().to_string(),
+                   oplog.checkout_tip().content().to_string());
+    }
 
     #[test]
     fn test_merge1_simple_graph() {
