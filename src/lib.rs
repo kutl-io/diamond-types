@@ -219,6 +219,11 @@ pub mod frontier;
 mod check;
 mod encoding;
 pub mod causalgraph;
+
+/// Public error type for decode/load failures. The `encoding` module is
+/// private, but this type appears in public signatures (`load_from`,
+/// `decode_and_add`), so downstream crates need to be able to name it.
+pub use encoding::parseerror::ParseError;
 mod wal;
 mod ost;
 
