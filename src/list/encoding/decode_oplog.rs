@@ -76,7 +76,7 @@ impl<'a> BufReader<'a> {
             let seq = self.next_usize()?; // Bleh. Skip me when root!
             if mapped_agent == 0 { break; } // Root.
 
-            let agent = agent_map[mapped_agent - 1].0;
+            let agent = agent_map.get(mapped_agent - 1).ok_or(ParseError::InvalidLength)?.0;
 
             let time = oplog.try_crdt_id_to_time((agent, seq))
                 .ok_or(ParseError::BaseVersionUnknown)?;
