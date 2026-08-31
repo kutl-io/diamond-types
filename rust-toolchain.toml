@@ -1,0 +1,4 @@
+[toolchain]
+# diamond-types 2.0.0 sets rust-version = 1.96; environments whose default
+# rustup toolchain is older need the floor pinned here (repo-local).
+channel = "1.96"

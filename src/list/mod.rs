@@ -77,7 +77,11 @@ pub struct ListBranch {
     version: Frontier,
 
     /// The document's content.
-    content: jumprope::JumpRopeBuf,
+    ///
+    /// A plain (unbuffered) rope: `JumpRopeBuf`'s internal `RefCell` would
+    /// make branches !Sync, and downstream servers share read-only branch
+    /// views across threads.
+    content: jumprope::JumpRope,
 }
 
 /// An OpLog is a collection of Diamond Types operations, stored in a super fancy compact way. Each
