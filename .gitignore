@@ -14,3 +14,5 @@ generated
 
 db.dtjson
 .vscode
+/*.cg
+/*.dts
